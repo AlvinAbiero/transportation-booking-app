@@ -1,0 +1,304 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  // output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  MPESA
+  COUNTER
+  CREDIT_CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID 
+  FAILED
+  REFUNDED
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  MAINTENANCE
+  RETIRED
+}
+
+enum BookingType {
+  VEHICLE_RENTAL
+  TAXI
+}
+
+// LOCATION & GEOGRAPHY
+model Location {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "Kisumu", "Nakuru"
+  city        String
+  address     String?
+  latitude    Float?
+  longitude   Float?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  vehiclesAtLocation Vehicle[]
+  vehicleBookingsPickup VehicleBooking[] @relation("PickupLocation")
+  vehicleBookingsDropoff VehicleBooking[] @relation("DropoffLocation")
+  taxiBookingsPickup    TaxiBooking[]    @relation("TaxiPickupLocation")
+  taxiBookingsDropoff   TaxiBooking[]    @relation("TaxiDropoffLocation")
+
+  @@index([city])
+  @@map("locations")
+}
+
+// VEHICLE MANAGEMENT
+model Vehicle {
+  id              String        @id @default(cuid())
+  name            String        // e.g., "Toyota Corolla"
+  brand           String        // e.g., "Toyota"
+  model           String        // e.g., "Corolla"
+  year            Int
+  registrationNo  String        @unique
+  color           String
+  seats           Int
+  transmission    String        // "Automatic" or "Manual"
+  fuelType        String        // "Petrol", "Diesel", "Electric"
+  pricePerDay     Decimal       @db.Decimal(10, 2)
+  images          String[]      // Array of image URLs
+  features        String[]      // ["AC", "GPS", "Bluetooth"]
+  description     String?       @db.Text
+  status          VehicleStatus @default(AVAILABLE)
+  locationId      String
+  location        Location      @relation(fields: [locationId], references: [id])
+  
+  mileage         Int?          // Current mileage
+  lastServiceDate DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  // Relations
+  bookings       VehicleBooking[]
+
+  @@index([locationId])
+  @@index([status])
+  @@map("vehicles")
+}
+
+model VehicleCategory {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g., "Sedan", "SUV", "Van"
+  description String?
+  seats       Int      // Passenger capacity
+  basePrice   Decimal  @db.Decimal(10, 2) // Base price for taxi bookings
+  pricePerKm  Decimal  @db.Decimal(10, 2) // Price per kilometer
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  taxiBookings TaxiBooking[]
+
+  @@map("vehicle_categories")
+}
+
+// CUSTOMER MANAGEMENT
+
+model Customer {
+  id              String   @id @default(cuid())
+  firstName       String
+  lastName        String
+  email           String   @unique
+  phone           String
+  alternatePhone  String?
+  address         String?
+  city            String?
+  country         String   @default("Kenya")
+
+   // Driving License info
+  drivingLicense  String?
+  licenseExpiry   DateTime?
+  licenseImageUrl String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+   // Relations
+  vehicleBookings VehicleBooking[]
+  taxiBookings    TaxiBooking[]
+
+  @@index([email])
+  @@index([phone])
+  @@map("customers")
+}
+
+// VEHICLE RENTAL BOOKINGS
+
+model VehicleBooking {
+  id                String        @id @default(cuid())
+  bookingNumber     String        @unique @default(cuid())
+  
+  // Customer info
+  customerId        String
+  customer          Customer      @relation(fields: [customerId], references: [id])
+  
+  // Vehicle info
+  vehicleId         String
+  vehicle           Vehicle       @relation(fields: [vehicleId], references: [id])
+
+    // Booking dates
+  pickupDate        DateTime
+  dropoffDate       DateTime
+  pickupLocationId  String
+  pickupLocation    Location      @relation("PickupLocation", fields: [pickupLocationId], references: [id])
+  dropoffLocationId String
+  dropoffLocation   Location      @relation("DropoffLocation", fields: [dropoffLocationId], references: [id])
+
+    // Pricing
+  pricePerDay       Decimal       @db.Decimal(10, 2)
+  numberOfDays      Int
+  subtotal          Decimal       @db.Decimal(10, 2)
+  tax               Decimal       @db.Decimal(10, 2) @default(0)
+  totalAmount       Decimal       @db.Decimal(10, 2)
+
+    // Payment
+  paymentMethod     PaymentMethod
+  paymentStatus     PaymentStatus @default(PENDING)
+  paidAt            DateTime?
+  
+  // Status & confirmation
+  status            BookingStatus @default(PENDING)
+  confirmedByAdmin  Boolean       @default(false)
+  confirmedAt       DateTime?
+  confirmedBy       String?       // Admin ID who confirmed
+
+   // Additional info
+  specialRequests   String?       @db.Text
+  notes             String?       @db.Text // Admin notes
+  
+  // Email tracking
+  confirmationEmailSent Boolean   @default(false)
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  cancelledAt       DateTime?
+  completedAt       DateTime?
+  
+  @@index([customerId])
+  @@index([vehicleId])
+  @@index([pickupDate])
+  @@index([status])
+  @@index([bookingNumber])
+  @@map("vehicle_bookings")
+}
+
+// TAXI BOOKINGS
+
+model TaxiBooking {
+    id                String          @id @default(cuid())
+  bookingNumber     String          @unique @default(cuid())
+  
+  // Customer info
+  customerId        String
+  customer          Customer        @relation(fields: [customerId], references: [id])
+  
+  // Trip info
+  pickupLocationId  String
+  pickupLocation    Location        @relation("TaxiPickupLocation", fields: [pickupLocationId], references: [id])
+  pickupAddress     String          // Full address text
+  pickupLat         Float?
+  pickupLng         Float?
+  
+  dropoffLocationId String
+  dropoffLocation   Location        @relation("TaxiDropoffLocation", fields: [dropoffLocationId], references: [id])
+  dropoffAddress    String          // Full address text
+  dropoffLat        Float?
+  dropoffLng        Float?
+
+   // Vehicle category
+  categoryId        String
+  category          VehicleCategory @relation(fields: [categoryId], references: [id])
+  
+  // Trip details from Mapbox
+  distance          Float           // in kilometers
+  duration          Int             // in minutes
+  route             Json?           // Store full route data if needed
+  
+  // Scheduling
+  pickupDateTime    DateTime
+  
+  // Pricing
+  basePrice         Decimal         @db.Decimal(10, 2)
+  pricePerKm        Decimal         @db.Decimal(10, 2)
+  calculatedPrice   Decimal         @db.Decimal(10, 2)
+  tax               Decimal         @db.Decimal(10, 2) @default(0)
+  totalAmount       Decimal         @db.Decimal(10, 2)
+  
+  // Payment - Taxi bookings are always counter payment per PRD
+  paymentMethod     PaymentMethod   @default(COUNTER)
+  paymentStatus     PaymentStatus   @default(PENDING)
+  paidAt            DateTime?
+
+    // Status
+  status            BookingStatus   @default(PENDING)
+  confirmedByAdmin  Boolean         @default(false)
+  confirmedAt       DateTime?
+  confirmedBy       String?
+  
+  // Additional
+  passengers        Int
+  specialRequests   String?         @db.Text
+  notes             String?         @db.Text
+  
+  // Email tracking
+  confirmationEmailSent Boolean     @default(false)
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  cancelledAt       DateTime?
+  completedAt       DateTime?
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([pickupDateTime])
+  @@index([status])
+  @@index([bookingNumber])
+  @@map("taxi_bookings")
+}
+
+// ADMIN & AUTHENTICATION
+
+model Admin {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  role          String    @default("admin") // Future: "super_admin", "manager", "staff"
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("admins")
+}
