@@ -7,12 +7,13 @@ import {
   VehicleCategory,
   BookingStatus,
   PaymentMethod,
-  PaymentStatus,
+  // PaymentStatus,
 } from "@prisma/client";
+import { LineString } from "geojson";
 
 // API Response Types
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -81,7 +82,7 @@ export interface TaxiRouteCalculationInput {
 export interface TaxiRouteResult {
   distance: number; // in kilometers
   duration: number; // in minutes
-  route?: any; // Full Mapbox route data
+  route?: MapboxDirectionsResponse["routes"][number]; // Full Mapbox route data
 }
 
 export interface TaxiPriceCalculation {
@@ -184,7 +185,7 @@ export interface MapboxDirectionsResponse {
   routes: Array<{
     distance: number; // in meters
     duration: number; // in seconds
-    geometry: any;
+    geometry: LineString;
   }>;
 }
 
@@ -240,61 +241,7 @@ export type DeepPartial<T> = {
 };
 
 // Date Range Utilities
-
 export interface DateRange {
   start: Date;
   end: Date;
-}
-
-export function calculateNumberOfDays(startDate: Date, endDate: Date): number {
-  const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-  return diffDays;
-}
-
-export function isDateRangeValid(startDate: Date, endDate: Date): boolean {
-  return startDate < endDate && startDate >= new Date();
-}
-
-// Price Calculation Utilities
-
-export function calculateVehicleBookingPrice(
-  pricePerDay: number,
-  numberOfDays: number,
-  taxRate: number = 0.16 // 16% VAT in Kenya
-): {
-  subtotal: number;
-  tax: number;
-  totalAmount: number;
-} {
-  const subtotal = pricePerDay * numberOfDays;
-  const tax = subtotal * taxRate;
-  const totalAmount = subtotal + tax;
-
-  return {
-    subtotal: Math.round(subtotal * 100) / 100,
-    tax: Math.round(tax * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
-  };
-}
-
-export function calculateTaxiPrice(
-  basePrice: number,
-  pricePerKm: number,
-  distance: number,
-  taxRate: number = 0.16
-): {
-  calculatedPrice: number;
-  tax: number;
-  totalAmount: number;
-} {
-  const calculatedPrice = basePrice + pricePerKm * distance;
-  const tax = calculatedPrice * taxRate;
-  const totalAmount = calculatedPrice + tax;
-
-  return {
-    calculatedPrice: Math.round(calculatedPrice * 100) / 100,
-    tax: Math.round(tax * 100) / 100,
-    totalAmount: Math.round(totalAmount * 100) / 100,
-  };
 }
